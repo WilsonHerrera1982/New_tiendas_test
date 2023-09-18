@@ -15,6 +15,9 @@ import com.example.tiendas.Excepciones.ClienteNotFoundException;
 import com.example.tiendas.Excepciones.PedidoNotFoundException;
 import com.example.tiendas.Excepciones.ProductoNotFoundException;
 import com.example.tiendas.Excepciones.ProductoSinStockException;
+import com.example.tiendas.dto.DetallePedidoDto;
+import com.example.tiendas.dto.PedidoDto;
+import com.example.tiendas.dto.ProductoDto;
 import com.example.tiendas.modulo.Cliente;
 import com.example.tiendas.modulo.DetallePedido;
 import com.example.tiendas.modulo.Pedido;
@@ -47,14 +50,17 @@ public class PedidoService {
 	public Pedido obtenerPedidoPorId(Long id) {
 		Optional<Pedido> pedido = pedidoRepository.findById(id);
 		if (pedido.isPresent()) {
-			return pedido.get();
+			Pedido ped= new Pedido();
+			ped=pedido.get();
+			ped.setDetalles(new ArrayList<>());
+			return ped;
 		} else {
 			throw new PedidoNotFoundException("Pedido no encontrado");
 		}
 	}
 
 	public Pedido crearPedido(Pedido pedido) {
-			return pedidoRepository.save(pedido);
+		return pedidoRepository.save(pedido);
 	}
 
 	public Pedido actualizarPedido(Long id, Pedido pedidoActualizado) {
@@ -65,9 +71,26 @@ public class PedidoService {
 	}
 
 	public void eliminarPedido(Long id) {
-		Pedido pedido = obtenerPedidoPorId(id);
-		pedidoRepository.delete(pedido);
+	    // Cargar el pedido con sus detalles
+	    Pedido pedido = pedidoRepository.findById(id).orElse(null);
+
+	    if (pedido != null) {
+	        // Elimina los detalles primero
+	    	if(!pedido.getDetalles().isEmpty()) {
+	    		 pedido.getDetalles().forEach(detalle -> {
+	 	            // Asegúrate de eliminar cualquier referencia del detalle al pedido antes de eliminarlo
+	 	            detalle.setPedido(null);
+	 	            detallePedidoRepository.delete(detalle);
+	 	        });
+	    	}
+	       
+	    	pedido=pedidoRepository.findById(id).orElse(null);
+	        // Finalmente, elimina el pedido
+	        pedidoRepository.delete(pedido);
+	        
+	    }
 	}
+
 
 	public Pedido realizarPedido(PedidoRequest pedidoRequest) {
 	    // Obtener el cliente y validar su existencia
@@ -78,50 +101,87 @@ public class PedidoService {
 	    pedido.setCliente(cliente);
 	    pedido.setFecha(new java.util.Date());
 	    pedido.setEstado("Generado");
+
+	    // No accedas a la propiedad "detalles" aquí
+
+	    // Guardar el pedido en la base de datos
 	    pedido = pedidoRepository.save(pedido);
-
-	    // Crear una lista para mantener el pedido final
-	    List<Pedido> pedidoFinal = new ArrayList<>();
-	    pedidoFinal.add(pedido);
-
+	    final Pedido pedidoFinal = pedido; // Declara una variable final
 	    // Crear los detalles del pedido
+	 // Crear los detalles del pedido
 	    List<DetallePedido> detalles = pedidoRequest.getDetalles().stream().map(detalleRequest -> {
 	        Producto producto = obtenerProductoPorId(detalleRequest.getProductoId());
-	        if(producto.getStock()>0 && detalleRequest.getCantidad()< producto.getStock()) {
-	        producto.setStock(producto.getStock()-detalleRequest.getCantidad());
-	        DetallePedido detalle = new DetallePedido();
-	        detalle.setPedido(pedidoFinal.get(0)); // Usar el pedido final aquí
-	        detalle.setProducto(producto);
-	        detalle.setPrecioUnitario(producto.getPrecio());
-	        detalle.setCantidad(detalleRequest.getCantidad());	
-	        productoRepository.save(producto);
-	        return detallePedidoRepository.save(detalle);
-	        }else {
-	        	throw new ProductoSinStockException("Producto sin stock disponible");
+	        if (producto.getStock() > 0 && detalleRequest.getCantidad() < producto.getStock()) {
+	            producto.setStock(producto.getStock() - detalleRequest.getCantidad());
+	            DetallePedido detalle = new DetallePedido();
+	            detalle.setPedido(pedidoFinal); // Usar el pedido creado anteriormente
+	            detalle.setProducto(producto);
+	            detalle.setPrecioUnitario(producto.getPrecio());
+	            detalle.setCantidad(detalleRequest.getCantidad());
+	            productoRepository.save(producto);
+	            detallePedidoRepository.save(detalle);
+	            return detalle; // Devuelve el detalle creado
+	        } else {
+	            throw new ProductoSinStockException("Producto sin stock disponible");
 	        }
 	    }).collect(Collectors.toList());
 
-	    pedido.setDetalles(detalles);	    
+
+	    // Asignar los detalles al pedido después de guardarlos en la base de datos
+	    pedido.setDetalles(detalles);
+	    
+pedido.setDetalles(new ArrayList<DetallePedido>());
 	    return pedido;
 	}
 
-	public List<Pedido> obtenerPedidosPorClienteEnRangoDeFechas(Long clienteId, String fechaInicio, String fechaFin) {
+
+	public List<PedidoDto> obtenerPedidosPorClienteEnRangoDeFechas(Long clienteId, String fechaInicio,
+			String fechaFin) {
 		// Convertir las fechas de entrada a objetos Date si es necesario
 		Date inicio = convertirAFecha(fechaInicio);
 		Date fin = convertirAFecha(fechaFin);
-	  // Obtener los pedidos del cliente en el rango de fechas
-		return pedidoRepository.findByClienteIdAndFechaBetween(clienteId, inicio, fin);
+		// Obtener los pedidos del cliente en el rango de fechas
+		List<Pedido> pedidos = pedidoRepository.findByClienteIdAndFechaBetween(clienteId, inicio, fin);
+		List<PedidoDto> pedidoDtos = new ArrayList<>();
+
+		for (Pedido pedido : pedidos) {
+			PedidoDto pedidoDto = new PedidoDto();
+			pedidoDto.setId(pedido.getId());
+			pedidoDto.setEstado(pedido.getEstado());
+			pedidoDto.setFecha(pedido.getFecha());
+			pedidoDto.setCliente(pedido.getCliente());
+
+			List<DetallePedidoDto> detallePedidoDtos = new ArrayList<>();
+
+			// Filtrar los productos de la tienda actual
+			List<DetallePedido> detallesDePedido = pedido.getDetalles();
+			for (DetallePedido det : detallesDePedido) {
+				DetallePedidoDto detallePedidoDto = new DetallePedidoDto();
+				detallePedidoDto.setId(det.getId());
+				detallePedidoDto.setCantidad(det.getCantidad());
+				ProductoDto productoDto = new ProductoDto();
+				productoDto.setId(det.getProducto().getId());
+				productoDto.setNombre(det.getProducto().getNombre());
+				productoDto.setPrecio(det.getPrecioUnitario());
+				productoDto.setStock(det.getProducto().getStock());
+				detallePedidoDto.setProducto(productoDto);
+				detallePedidoDtos.add(detallePedidoDto);
+			}
+			pedidoDto.setDetalles(detallePedidoDtos);
+			pedidoDtos.add(pedidoDto);
+		}
+		return pedidoDtos;
 	}
 
 	private Date convertirAFecha(String fechaString) {
-		
+
 		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd");
-        try {
-            return dateFormat.parse(fechaString);
-        } catch (ParseException e) {
-            e.printStackTrace();
-            return null;
-        }
+		try {
+			return dateFormat.parse(fechaString);
+		} catch (ParseException e) {
+			e.printStackTrace();
+			return null;
+		}
 	}
 
 	private Cliente obtenerClientePorId(Long clienteId) {

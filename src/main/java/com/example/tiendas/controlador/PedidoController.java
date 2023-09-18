@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.tiendas.dto.PedidoDto;
 import com.example.tiendas.modulo.Pedido;
 import com.example.tiendas.modulo.PedidoRequest;
 import com.example.tiendas.servicio.PedidoService;
@@ -55,7 +56,7 @@ public class PedidoController {
     }
 
     @GetMapping("/por-cliente")
-    public List<Pedido> obtenerPedidosPorClienteEnRangoDeFechas(
+    public List<PedidoDto> obtenerPedidosPorClienteEnRangoDeFechas(
             @RequestParam Long clienteId,
             @RequestParam String fechaInicio,
             @RequestParam String fechaFin) {

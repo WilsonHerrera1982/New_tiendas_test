@@ -6,6 +6,7 @@ import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -27,8 +28,12 @@ public class Pedido {
 
 	private String estado;
 
-	@OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
+	@OneToMany(mappedBy = "pedido", fetch = FetchType.EAGER)
 	private List<DetallePedido> detalles = new ArrayList<>();
+
+	public List<DetallePedido> getDetalles() {
+		return detalles;
+	}
 
 	public Long getId() {
 		return id;
